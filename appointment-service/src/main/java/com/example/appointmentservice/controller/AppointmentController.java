@@ -21,10 +21,19 @@ public class AppointmentController {
 
     @PostMapping
     public ResponseEntity<?> createAppointment(@RequestBody AppointmentRequest request) {
-        Object result = appointmentService.createAppointment(request);
-        if (result instanceof ApiResponseError) {
-            return new ResponseEntity<>(result, HttpStatus.SERVICE_UNAVAILABLE);
+        try {
+            Object result = appointmentService.createAppointment(request);
+            if (result instanceof ApiResponseError) {
+                return new ResponseEntity<>(result, HttpStatus.SERVICE_UNAVAILABLE);
+            }
+            return ResponseEntity.ok(result);
+        } catch (Exception ex) {
+            ApiResponseError error = new ApiResponseError(
+                    "ServiceUnavailable",
+                    "Hiện tại không thể kiểm tra thông tin bệnh nhân, vui lòng thử lại sau vài giây",
+                    java.time.format.DateTimeFormatter.ISO_INSTANT.format(java.time.Instant.now())
+            );
+            return new ResponseEntity<>(error, HttpStatus.SERVICE_UNAVAILABLE);
         }
-        return ResponseEntity.ok(result);
     }
 }

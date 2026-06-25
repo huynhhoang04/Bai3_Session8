@@ -5,6 +5,7 @@ import com.example.appointmentservice.dto.AppointmentRequest;
 import com.example.appointmentservice.model.Appointment;
 import com.example.appointmentservice.repository.AppointmentRepository;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -21,10 +22,9 @@ public class AppointmentService {
     @Autowired
     private RestTemplate restTemplate;
 
-    @CircuitBreaker(name = "doctorServiceCB", fallbackMethod = "getDoctorFallback")
     public Object createAppointment(AppointmentRequest request) {
-        restTemplate.getForObject("http://patient-service/api/v1/patients/" + request.getPatientId(), Object.class);
-        restTemplate.getForObject("http://doctor-service/api/v1/doctors/" + request.getDoctorId(), Object.class);
+        verifyPatient(request.getPatientId());
+        verifyDoctor(request.getDoctorId());
 
         Appointment appointment = new Appointment();
         appointment.setPatientId(request.getPatientId());
@@ -35,7 +35,22 @@ public class AppointmentService {
         return appointmentRepository.save(appointment);
     }
 
-    public Object getDoctorFallback(Exception e) {
+    @Retry(name = "patientRetry", fallbackMethod = "patientFallback")
+    public void verifyPatient(Long patientId) {
+        restTemplate.getForObject("http://patient-service/api/v1/patients/" + patientId, Object.class);
+    }
+
+    public void patientFallback(Long patientId, Exception e) {
+        throw new RuntimeException("Patient service không khả dụng sau khi thử lại: " + e.getMessage());
+    }
+
+    @CircuitBreaker(name = "doctorServiceCB", fallbackMethod = "doctorFallback")
+    public Object verifyDoctor(Long doctorId) {
+        restTemplate.getForObject("http://doctor-service/api/v1/doctors/" + doctorId, Object.class);
+        return null;
+    }
+
+    public Object doctorFallback(Long doctorId, Exception e) {
         return new ApiResponseError(
                 "ServiceUnavailable",
                 "Hiện tại không thể kiểm tra thông tin bác sĩ, vui lòng thử lại sau vài giây",
